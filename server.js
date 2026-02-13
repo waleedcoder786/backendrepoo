@@ -5,21 +5,26 @@ require('dotenv').config();
 
 const app = express();
 // app.use(cors());
-app.use(cors({
+// 1. CORS Configuration
+const corsOptions = {
   origin: function (origin, callback) {
-    // Agar request Vercel se aa rahi hai ya local se, toh allow kar do
+    // Agar request Vercel se ho ya local se, ya phir Postman (no origin) se
     if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
       callback(null, true);
     } else {
-      callback(new Error("CORS block: Yeh domain allowed nahi hai"));
+      callback(new Error("CORS block: Domain not allowed"));
     }
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-}));
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+};
 
-// Pre-flight requests ke liye
-app.options('*', cors());
+// 2. Apply CORS Middleware (Isay sabse upar rakhein)
+app.use(cors(corsOptions));
+
+// 3. Ye wali line DELETE kar dein jo error de rahi thi:
+// app.options('*', cors());  <-- ISAY HATA DEIN
 app.use(express.json({ limit: '50mb' })); // Large paper data handle karne ke liye
 
 const mongoURI = process.env.MONGO_URI;
