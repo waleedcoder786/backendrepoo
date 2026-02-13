@@ -6,7 +6,11 @@ require('dotenv').config();
 const app = express();
 // app.use(cors());
 app.use(cors({
-  origin: "https://your-frontend-link.vercel.app", // Apna Vercel link yahan dalein
+  origin: [
+    "https://frontend-jaql-git-main-waleeds-projects-2f307245.vercel.app/", // Apna asli Vercel link yahan dalein
+    "http://localhost:5000"                  // Local testing ke liye
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' })); // Large paper data handle karne ke liye
