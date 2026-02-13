@@ -4,7 +4,11 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.use(cors());
+// app.use(cors());
+app.use(cors({
+  origin: "https://your-frontend-link.vercel.app", // Apna Vercel link yahan dalein
+  credentials: true
+}));
 app.use(express.json({ limit: '50mb' })); // Large paper data handle karne ke liye
 
 const mongoURI = process.env.MONGO_URI;
@@ -63,18 +67,26 @@ const Paper = mongoose.model('Paper', new mongoose.Schema({
     },
     createdAt: { type: Date, default: Date.now }
 }));
-
-const Teacher = mongoose.model('Teacher', new mongoose.Schema({
-    id: String,
-    userId: String,
+const TeacherSchema = new mongoose.Schema({
     name: String,
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    phone: String,
+    city: String,
     subjects: [String],
-    classes: [String]
-}, { timestamps: true }));
+    classes: [String],
+    adminId: { type: String, required: true }, // Moon ki ID
+    role: { type: String, default: "teacher" },
+    institute: String,
+    watermark: String,
+    logo: String,
+    address: String,
+}, { timestamps: true });
+
+const Teacher = mongoose.model('Teacher', TeacherSchema);
 
 // --- ROUTES ---
+
 
 // 1. LOGIN
 app.post('/api/login', async (req, res) => {
@@ -140,20 +152,52 @@ app.delete('/api/users/:id', async (req, res) => {
 });
 
 // 4. TEACHER MANAGEMENT
-app.get('/api/teachers', async (req, res) => {
-    const { userId } = req.query;
-    const filter = userId ? { userId } : {};
-    const teachers = await Teacher.find(filter);
-    res.json(teachers);
-});
+// Teacher Registration
 app.post('/api/teachers', async (req, res) => {
-    const newTeacher = new Teacher(req.body);
-    await newTeacher.save();
-    res.status(201).json(newTeacher);
+    try {
+        const newTeacher = new Teacher(req.body);
+        await newTeacher.save();
+        res.status(201).json(newTeacher);
+    } catch (err) {
+        console.error("Save Error:", err);
+        res.status(500).json({ error: err.message });
+    }
 });
+
+// Get Teachers for specific Admin
+app.get('/api/teachers', async (req, res) => {
+    try {
+        const { adminId } = req.query;
+        const filter = adminId ? { adminId: adminId } : {};
+        const teachers = await Teacher.find(filter).sort({ createdAt: -1 });
+        res.json(teachers);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update Teacher
+app.put('/api/teachers/:id', async (req, res) => {
+    try {
+        const updatedTeacher = await Teacher.findByIdAndUpdate(
+            req.params.id,
+            { $set: req.body },
+            { new: true }
+        );
+        res.json(updatedTeacher);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete Teacher
 app.delete('/api/teachers/:id', async (req, res) => {
-    await Teacher.findByIdAndDelete(req.params.id);
-    res.json({ message: "Teacher deleted" });
+    try {
+        await Teacher.findByIdAndDelete(req.params.id);
+        res.json({ message: "Teacher deleted" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 5. PAPER MANAGEMENT (NEW & UPDATED)
