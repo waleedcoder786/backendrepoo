@@ -1,79 +1,102 @@
 const Class = require('../models/Class');
 
+// Get all structure
 exports.getAllClasses = async (req, res) => {
-    const classes = await Class.find({});
-    res.json(classes);
+    try {
+        const data = await Class.find({});
+        res.status(200).json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
+
+// Add Question with Auto-Topic-Creation Logic
 exports.addQuestion = async (req, res) => {
     const { classId, subjectName, chapterName, newQuestion, type, category } = req.body;
-    
+    const topicName = newQuestion.topic || "General";
+
     try {
         const doc = await Class.findOne({ "classes.id": classId });
         if (!doc) return res.status(404).json({ message: "Class not found" });
 
         const classIdx = doc.classes.findIndex(c => c.id === classId);
-        const subjects = doc.classes[classIdx].subjects || [];
+        const subjects = doc.classes[classIdx].subjects;
 
         // 1. Subject Match
-        const subjectIdx = subjects.findIndex(s => 
-            s.name?.toString().trim().toLowerCase() === subjectName.trim().toLowerCase()
-        );
-
+        const subjectIdx = subjects.findIndex(s => s.name.trim().toLowerCase() === subjectName.trim().toLowerCase());
         if (subjectIdx === -1) return res.status(404).json({ message: "Subject not found" });
 
-        let chapters = doc.classes[classIdx].subjects[subjectIdx].chapters || [];
-
-        // 2. Chapter Match (String ya Object dono ko handle karega)
-        let chapterIdx = chapters.findIndex(ch => {
-            if (typeof ch === 'string') return ch.trim().toLowerCase() === chapterName.trim().toLowerCase();
-            if (typeof ch === 'object') return ch.name?.trim().toLowerCase() === chapterName.trim().toLowerCase();
-            return false;
-        });
+        // 2. Chapter Match (Convert string to object if necessary)
+        let chapters = doc.classes[classIdx].subjects[subjectIdx].chapters;
+        let chapterIdx = chapters.findIndex(ch => 
+            (typeof ch === 'string' ? ch : ch.name).trim().toLowerCase() === chapterName.trim().toLowerCase()
+        );
 
         if (chapterIdx === -1) {
-            // Agar chapter bilkul nahi hai to naya object banayein
-            doc.classes[classIdx].subjects[subjectIdx].chapters.push({
-                name: chapterName,
-                topics: [], MCQs: {}, shorts: {}, longs: {}
-            });
+            // Naya chapter agar nahi hai
+            doc.classes[classIdx].subjects[subjectIdx].chapters.push({ name: chapterName, topics: [] });
             chapterIdx = doc.classes[classIdx].subjects[subjectIdx].chapters.length - 1;
         } else if (typeof chapters[chapterIdx] === 'string') {
-            // AGAR CHAPTER SIRF STRING HAI: To usay Object mein convert karein
-            const chName = chapters[chapterIdx];
-            doc.classes[classIdx].subjects[subjectIdx].chapters[chapterIdx] = {
-                name: chName,
-                topics: [],
-                MCQs: {},
-                shorts: {},
-                longs: {}
-            };
+            // String chapter ko object mein upgrade karein
+            doc.classes[classIdx].subjects[subjectIdx].chapters[chapterIdx] = { name: chapters[chapterIdx], topics: [] };
         }
 
-        // 3. Data Entry
         let targetChapter = doc.classes[classIdx].subjects[subjectIdx].chapters[chapterIdx];
-        const fieldName = type === 'mcq' ? 'MCQs' : type === 'short' ? 'shorts' : 'longs';
+        if (!targetChapter.topics) targetChapter.topics = [];
 
-        if (!targetChapter[fieldName]) targetChapter[fieldName] = {};
-        if (!Array.isArray(targetChapter[fieldName][category])) {
-            targetChapter[fieldName][category] = [];
+        // 3. Topic Match (NEW TOPIC LOGIC - Auto Push at end)
+        let topicIdx = targetChapter.topics.findIndex(t => 
+            t.name.trim().toLowerCase() === topicName.trim().toLowerCase()
+        );
+
+        if (topicIdx === -1) {
+            const newTopicTemplate = {
+                name: topicName,
+                questionTypes: {
+                    mcqs: { categories: [] },
+                    shorts: { categories: [] },
+                    longs: { categories: [] }
+                }
+            };
+            targetChapter.topics.push(newTopicTemplate); // Hamesha list ke end mein add hoga
+            topicIdx = targetChapter.topics.length - 1;
         }
 
-        targetChapter[fieldName][category].push(newQuestion);
-
-        // Topic Sync
-        if (newQuestion.topic) {
-            if (!targetChapter.topics) targetChapter.topics = [];
-            if (!targetChapter.topics.includes(newQuestion.topic)) targetChapter.topics.push(newQuestion.topic);
+        const targetTopic = targetChapter.topics[topicIdx];
+        const typeKey = type === 'mcq' ? 'mcqs' : type === 'short' ? 'shorts' : 'longs';
+        
+        if (!targetTopic.questionTypes[typeKey]) {
+            targetTopic.questionTypes[typeKey] = { categories: [] };
         }
 
-        // 4. Save
+        // 4. Category Match (Exercise / Additional etc.)
+        let categories = targetTopic.questionTypes[typeKey].categories;
+        let catIdx = categories.findIndex(c => c.name.trim().toLowerCase() === category.trim().toLowerCase());
+
+        if (catIdx === -1) {
+            categories.push({ name: category, questions: [] });
+            catIdx = categories.length - 1;
+        }
+
+        // 5. Final Push Question
+        categories[catIdx].questions.push({
+            id: newQuestion.q_no || Date.now(),
+            question: newQuestion.question,
+            options: newQuestion.options,
+            answer: newQuestion.answer
+        });
+
+        // 6. Save and Mark Modified
         doc.markModified('classes');
         await doc.save();
 
-        res.status(200).json({ success: true, message: "Chapter converted and data saved!" });
+        res.status(200).json({ 
+            success: true, 
+            message: `Successfully added to topic: ${topicName}` 
+        });
 
     } catch (err) {
-        console.error("LOG:", err);
+        console.error("AddQuestion Error:", err);
         res.status(500).json({ error: err.message });
     }
 };
