@@ -9,18 +9,18 @@ const app = express();
 connectDB();
 
 // 2. Middlewares
-// const corsOptions = {
-//     origin: (origin, callback) => {
-//         if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
-//             callback(null, true);
-//         } else {
-//             callback(new Error("CORS block"));
-//         }
-//     },
-//     credentials: true
-// };
-// app.use(cors(corsOptions));
-app.use(cors());
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (!origin || origin.includes("vercel.app") || origin.includes("localhost")) {
+            callback(null, true);
+        } else {
+            callback(new Error("CORS block"));
+        }
+    },
+    credentials: true
+};
+app.use(cors(corsOptions));
+// app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 // 3. Route Splitting
